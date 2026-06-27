@@ -49,6 +49,10 @@
     (should (string-match-p "justify-content: center" html))
     (should (string-match-p "border: 1px solid" html))))
 
+(ert-deftest org-markgraf-inline-preview-hides-frame-titles-by-default ()
+  (let ((html (org-markgraf-inline-html-document "seed 1")))
+    (should (string-match-p "data-markgraf-titles=\"false\"" html))))
+
 (ert-deftest org-markgraf-inline-preview-uses-pixel-dimensions ()
   (should (equal (org-markgraf--inline-preview-size '((:height . "320") (:width . "760")))
                  '(760 . 320))))
@@ -76,5 +80,15 @@
 (ert-deftest org-markgraf-preview-button-string-can-show-hide-state ()
   (should (string-match-p "Preview Markgraf" (org-markgraf--preview-button-string)))
   (should (string-match-p "Hide Markgraf" (org-markgraf--preview-button-string t))))
+
+(ert-deftest org-markgraf-side-preview-mode-has-evil-style-controls ()
+  (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "h"))
+              #'org-markgraf-side-preview-scrub-backward))
+  (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "l"))
+              #'org-markgraf-side-preview-scrub-forward))
+  (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "SPC"))
+              #'org-markgraf-side-preview-toggle-play))
+  (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "q"))
+              #'org-markgraf-close-side-preview)))
 
 ;;; org-markgraf-test.el ends here

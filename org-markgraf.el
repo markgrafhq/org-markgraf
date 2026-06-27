@@ -22,6 +22,8 @@
 
 (declare-function xwidget-insert "xwidget" (pos type title width height &optional args related))
 (declare-function xwidget-webkit-goto-uri "xwidget" (xwidget uri))
+(declare-function xwidget-webkit-execute-script "xwidget" (xwidget script &optional fun))
+(declare-function evil-define-key "evil-core" (state keymap key def &rest bindings))
 
 (defgroup org-markgraf nil
   "Render markgraf diagrams in Org."
@@ -55,6 +57,11 @@
   :type 'boolean
   :group 'org-markgraf)
 
+(defcustom org-markgraf-inline-preview-show-titles nil
+  "When non-nil, show markgraf frame titles in inline previews."
+  :type 'boolean
+  :group 'org-markgraf)
+
 (defcustom org-markgraf-side-preview-buffer-name "*markgraf preview*"
   "Singleton buffer name for side-window markgraf previews."
   :type 'string
@@ -71,6 +78,21 @@
 (defvar org-markgraf--side-preview-block-begin nil
   "Source block position currently shown in the singleton side preview.")
 
+(defvar org-markgraf--side-preview-xwidget nil
+  "Xwidget currently shown in the singleton side preview.")
+
+(defvar org-markgraf-side-preview-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "h") #'org-markgraf-side-preview-scrub-backward)
+    (define-key map (kbd "l") #'org-markgraf-side-preview-scrub-forward)
+    (define-key map (kbd "<left>") #'org-markgraf-side-preview-scrub-backward)
+    (define-key map (kbd "<right>") #'org-markgraf-side-preview-scrub-forward)
+    (define-key map (kbd "SPC") #'org-markgraf-side-preview-toggle-play)
+    (define-key map (kbd "p") #'org-markgraf-side-preview-toggle-play)
+    (define-key map (kbd "q") #'org-markgraf-close-side-preview)
+    map)
+  "Keymap for `org-markgraf-side-preview-mode'.")
+
 (defvar-local org-markgraf--inline-previews nil
   "Inline markgraf preview records in the current buffer.")
 
@@ -84,6 +106,18 @@
     map)
   "Keymap used by inline markgraf preview buttons.")
 
+(define-derived-mode org-markgraf-side-preview-mode special-mode "Markgraf Preview"
+  "Mode for the singleton markgraf side preview buffer."
+  (setq-local kill-buffer-query-functions nil))
+
+(with-eval-after-load 'evil
+  (evil-define-key 'normal org-markgraf-side-preview-mode-map
+    (kbd "h") #'org-markgraf-side-preview-scrub-backward
+    (kbd "l") #'org-markgraf-side-preview-scrub-forward
+    (kbd "SPC") #'org-markgraf-side-preview-toggle-play
+    (kbd "p") #'org-markgraf-side-preview-toggle-play
+    (kbd "q") #'org-markgraf-close-side-preview))
+
 (defun org-markgraf-setup ()
   "Enable Org export and Babel support for markgraf source blocks."
   (add-to-list 'org-babel-load-languages '(markgraf . t))
@@ -93,10 +127,11 @@
     (with-no-warnings
       (add-hook 'org-export-before-processing-hook #'org-markgraf-export-blocks))))
 
-(defun org-markgraf-html (source &optional params)
-  "Return a markgraf embed element for SOURCE using PARAMS."
-  (format "<div data-markgraf data-markgraf-src-b64=\"%s\"%s></div>"
+(defun org-markgraf-html (source &optional params attributes)
+  "Return a markgraf embed element for SOURCE using PARAMS and ATTRIBUTES."
+  (format "<div data-markgraf data-markgraf-src-b64=\"%s\"%s%s></div>"
           (org-markgraf--source-b64 source)
+          (org-markgraf--attributes attributes)
           (org-markgraf--style-attribute params)))
 
 (defun org-markgraf-html-assets ()
@@ -116,7 +151,7 @@
   (format "<!doctype html>\n<meta charset=\"utf-8\">\n%s\n<style>\n%s\n</style>\n%s\n"
           (org-markgraf-html-assets)
           (org-markgraf--inline-css)
-          (org-markgraf-html source params)))
+          (org-markgraf-html source params (org-markgraf--inline-attributes))))
 
 (define-minor-mode org-markgraf-preview-button-mode
   "Show clickable inline preview buttons for markgraf source blocks."
@@ -178,7 +213,7 @@
     (setq org-markgraf--side-preview-file file
           org-markgraf--side-preview-block-begin block-begin)
     (with-current-buffer buffer
-      (setq-local kill-buffer-query-functions nil)
+      (org-markgraf-side-preview-mode)
       (let ((inhibit-read-only t))
         (erase-buffer)
         (insert "\n")
@@ -186,6 +221,7 @@
         (let ((xwidget (xwidget-insert (point) 'webkit "markgraf"
                                        (car size)
                                        (cdr size))))
+          (setq org-markgraf--side-preview-xwidget xwidget)
           (xwidget-webkit-goto-uri xwidget url))))
     (display-buffer-in-side-window
      buffer `((side . right)
@@ -202,9 +238,31 @@
   (when org-markgraf--side-preview-file
     (ignore-errors (delete-file org-markgraf--side-preview-file))
     (setq org-markgraf--side-preview-file nil
-          org-markgraf--side-preview-block-begin nil))
+          org-markgraf--side-preview-block-begin nil
+          org-markgraf--side-preview-xwidget nil))
   (dolist (overlay org-markgraf--preview-button-overlays)
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
+
+(defun org-markgraf-side-preview-scrub-backward ()
+  "Scrub the singleton side preview backward."
+  (interactive)
+  (org-markgraf--side-preview-scrub -1))
+
+(defun org-markgraf-side-preview-scrub-forward ()
+  "Scrub the singleton side preview forward."
+  (interactive)
+  (org-markgraf--side-preview-scrub 1))
+
+(defun org-markgraf-side-preview-toggle-play ()
+  "Toggle play/pause in the singleton side preview."
+  (interactive)
+  (org-markgraf--side-preview-execute
+   "(() => {
+  const play = document.querySelector('[data-mg=\"play\"]');
+  if (!play) return null;
+  play.click();
+  return play.getAttribute('data-mg-playing');
+})()"))
 
 (defun org-markgraf-preview-inline-at-point ()
   "Render the markgraf block at point inline with an Emacs WebKit xwidget."
@@ -326,6 +384,26 @@ When SHOWN is non-nil, render the button as a hide action."
                'keymap org-markgraf--preview-button-map)
    "\n"))
 
+(defun org-markgraf--side-preview-scrub (direction)
+  "Scrub the singleton side preview in DIRECTION."
+  (org-markgraf--side-preview-execute
+   (format "(() => {
+  const scrub = document.querySelector('[data-mg=\"scrub\"]');
+  if (!scrub) return null;
+  const max = Number(scrub.max || 1000);
+  const step = max / 20;
+  const value = Math.max(0, Math.min(max, Number(scrub.value || 0) + (%d * step)));
+  scrub.value = value;
+  scrub.dispatchEvent(new Event('input', { bubbles: true }));
+  return value;
+})()" direction)))
+
+(defun org-markgraf--side-preview-execute (script)
+  "Execute SCRIPT in the singleton side preview."
+  (unless org-markgraf--side-preview-xwidget
+    (user-error "No markgraf side preview is open"))
+  (xwidget-webkit-execute-script org-markgraf--side-preview-xwidget script))
+
 (defun org-markgraf--inline-preview-shown-p (block-begin)
   "Return non-nil when BLOCK-BEGIN has an inline preview."
   (cl-some (lambda (preview)
@@ -412,6 +490,20 @@ When INLINE is non-nil, write an Emacs inline preview document."
 (defun org-markgraf--source-b64 (source)
   "Return SOURCE encoded as unwrapped UTF-8 base64."
   (base64-encode-string (encode-coding-string source 'utf-8) t))
+
+(defun org-markgraf--inline-attributes ()
+  "Return HTML attributes for inline Emacs previews."
+  (unless org-markgraf-inline-preview-show-titles
+    '(("data-markgraf-titles" . "false"))))
+
+(defun org-markgraf--attributes (attributes)
+  "Return ATTRIBUTES formatted for an HTML tag."
+  (mapconcat (lambda (attribute)
+               (format " %s=\"%s\""
+                       (org-markgraf--html-escape (format "%s" (car attribute)))
+                       (org-markgraf--html-escape (cdr attribute))))
+             attributes
+             ""))
 
 (defun org-markgraf--style-attribute (params)
   "Return a style attribute built from PARAMS."
