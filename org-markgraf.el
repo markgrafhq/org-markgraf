@@ -178,9 +178,12 @@
     (setq org-markgraf--side-preview-file file
           org-markgraf--side-preview-block-begin block-begin)
     (with-current-buffer buffer
+      (setq-local kill-buffer-query-functions nil)
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (let ((xwidget (xwidget-insert (point-min) 'webkit "markgraf"
+        (insert "\n")
+        (goto-char (point-min))
+        (let ((xwidget (xwidget-insert (point) 'webkit "markgraf"
                                        (car size)
                                        (cdr size))))
           (xwidget-webkit-goto-uri xwidget url))))
@@ -194,7 +197,8 @@
   "Close the singleton side preview buffer and delete its temp file."
   (interactive)
   (when-let* ((buffer (get-buffer org-markgraf-side-preview-buffer-name)))
-    (kill-buffer buffer))
+    (let ((kill-buffer-query-functions nil))
+      (kill-buffer buffer)))
   (when org-markgraf--side-preview-file
     (ignore-errors (delete-file org-markgraf--side-preview-file))
     (setq org-markgraf--side-preview-file nil
@@ -218,14 +222,16 @@
     (goto-char end)
     (unless (bolp)
       (insert "\n"))
-    (let* ((insert-begin (copy-marker (point)))
-           (xwidget (xwidget-insert (point) 'webkit "markgraf"
-                                    (car size)
-                                    (cdr size)))
-           (insert-end (copy-marker (point) t)))
-      (xwidget-webkit-goto-uri xwidget url)
-      (push (list begin end insert-begin insert-end xwidget file)
-            org-markgraf--inline-previews))))
+    (let ((insert-begin (copy-marker (point))))
+      (insert "\n")
+      (goto-char insert-begin)
+      (let* ((xwidget (xwidget-insert (point) 'webkit "markgraf"
+                                      (car size)
+                                      (cdr size)))
+             (insert-end (copy-marker (1+ (marker-position insert-begin)) t)))
+        (xwidget-webkit-goto-uri xwidget url)
+        (push (list begin end insert-begin insert-end xwidget file)
+              org-markgraf--inline-previews)))))
 
 (defun org-markgraf-clear-inline-preview-at-point ()
   "Clear the inline markgraf preview for the block at point."
