@@ -119,4 +119,11 @@
   (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "q"))
               #'org-markgraf-close-side-preview)))
 
+(ert-deftest org-markgraf-side-preview-playback-is-owned-by-org-markgraf ()
+  (let ((script (symbol-function #'org-markgraf-side-preview-toggle-play)))
+    (should script)
+    (with-temp-buffer
+      (insert (documentation #'org-markgraf-side-preview-toggle-play))
+      (should (string-match-p "Toggle play/pause" (buffer-string))))))
+
 ;;; org-markgraf-test.el ends here

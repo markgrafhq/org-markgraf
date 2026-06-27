@@ -358,10 +358,29 @@
   (interactive)
   (org-markgraf--side-preview-execute
    "(() => {
+  const scrub = document.querySelector('[data-mg=\"scrub\"]');
   const play = document.querySelector('[data-mg=\"play\"]');
-  if (!play) return null;
-  play.click();
-  return play.getAttribute('data-mg-playing');
+  if (!scrub) return null;
+  if (play && play.getAttribute('data-mg-playing') === '1') play.click();
+  if (window.__orgMarkgrafTimer) {
+    clearInterval(window.__orgMarkgrafTimer);
+    window.__orgMarkgrafTimer = null;
+    return 'paused';
+  }
+  const max = Number(scrub.max || 1000);
+  if (Number(scrub.value || 0) >= max - 1) scrub.value = 0;
+  const step = max / 240;
+  window.__orgMarkgrafTimer = setInterval(() => {
+    const current = Number(scrub.value || 0);
+    const next = Math.min(max, current + step);
+    scrub.value = next;
+    scrub.dispatchEvent(new Event('input', { bubbles: true }));
+    if (next >= max) {
+      clearInterval(window.__orgMarkgrafTimer);
+      window.__orgMarkgrafTimer = null;
+    }
+  }, 50);
+  return 'playing';
 })()"))
 
 (defun org-markgraf-preview-inline-at-point ()
@@ -490,6 +509,10 @@ When SHOWN is non-nil, render the button as a hide action."
    (format "(() => {
   const scrub = document.querySelector('[data-mg=\"scrub\"]');
   if (!scrub) return null;
+  if (window.__orgMarkgrafTimer) {
+    clearInterval(window.__orgMarkgrafTimer);
+    window.__orgMarkgrafTimer = null;
+  }
   const max = Number(scrub.max || 1000);
   const current = Number(scrub.value || 0);
   const ticks = Array.from(document.querySelectorAll('.mg-tick'))
