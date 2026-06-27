@@ -85,6 +85,8 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "h") #'org-markgraf-side-preview-scrub-backward)
     (define-key map (kbd "l") #'org-markgraf-side-preview-scrub-forward)
+    (define-key map (kbd "H") #'org-markgraf-side-preview-scrub-backward-fast)
+    (define-key map (kbd "L") #'org-markgraf-side-preview-scrub-forward-fast)
     (define-key map (kbd "<left>") #'org-markgraf-side-preview-scrub-backward)
     (define-key map (kbd "<right>") #'org-markgraf-side-preview-scrub-forward)
     (define-key map (kbd "SPC") #'org-markgraf-side-preview-toggle-play)
@@ -114,6 +116,8 @@
   (evil-define-key 'normal org-markgraf-side-preview-mode-map
     (kbd "h") #'org-markgraf-side-preview-scrub-backward
     (kbd "l") #'org-markgraf-side-preview-scrub-forward
+    (kbd "H") #'org-markgraf-side-preview-scrub-backward-fast
+    (kbd "L") #'org-markgraf-side-preview-scrub-forward-fast
     (kbd "SPC") #'org-markgraf-side-preview-toggle-play
     (kbd "p") #'org-markgraf-side-preview-toggle-play
     (kbd "q") #'org-markgraf-close-side-preview))
@@ -244,14 +248,24 @@
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
 
 (defun org-markgraf-side-preview-scrub-backward ()
-  "Scrub the singleton side preview backward."
+  "Scrub the singleton side preview one frame backward."
   (interactive)
-  (org-markgraf--side-preview-scrub -1))
+  (org-markgraf--side-preview-scrub -1 1))
 
 (defun org-markgraf-side-preview-scrub-forward ()
-  "Scrub the singleton side preview forward."
+  "Scrub the singleton side preview one frame forward."
   (interactive)
-  (org-markgraf--side-preview-scrub 1))
+  (org-markgraf--side-preview-scrub 1 1))
+
+(defun org-markgraf-side-preview-scrub-backward-fast ()
+  "Scrub the singleton side preview five frames backward."
+  (interactive)
+  (org-markgraf--side-preview-scrub -1 5))
+
+(defun org-markgraf-side-preview-scrub-forward-fast ()
+  "Scrub the singleton side preview five frames forward."
+  (interactive)
+  (org-markgraf--side-preview-scrub 1 5))
 
 (defun org-markgraf-side-preview-toggle-play ()
   "Toggle play/pause in the singleton side preview."
@@ -384,19 +398,39 @@ When SHOWN is non-nil, render the button as a hide action."
                'keymap org-markgraf--preview-button-map)
    "\n"))
 
-(defun org-markgraf--side-preview-scrub (direction)
-  "Scrub the singleton side preview in DIRECTION."
+(defun org-markgraf--side-preview-scrub (direction count)
+  "Scrub the singleton side preview COUNT frames in DIRECTION."
   (org-markgraf--side-preview-execute
    (format "(() => {
   const scrub = document.querySelector('[data-mg=\"scrub\"]');
   if (!scrub) return null;
   const max = Number(scrub.max || 1000);
-  const step = max / 20;
-  const value = Math.max(0, Math.min(max, Number(scrub.value || 0) + (%d * step)));
+  const current = Number(scrub.value || 0);
+  const ticks = Array.from(document.querySelectorAll('.mg-tick'))
+    .map(tick => parseFloat(tick.style.left || ''))
+    .filter(percent => Number.isFinite(percent))
+    .map(percent => Math.round(percent / 100 * max));
+  const frames = Array.from(new Set([0, ...ticks, max])).sort((left, right) => left - right);
+  let value;
+  if (frames.length > 2) {
+    const epsilon = 0.5;
+    if (%d > 0) {
+      const next = frames.findIndex(frame => frame > current + epsilon);
+      const index = next < 0 ? frames.length - 1 : Math.min(frames.length - 1, next + %d - 1);
+      value = frames[index];
+    } else {
+      const previous = frames.findLastIndex(frame => frame < current - epsilon);
+      const index = previous < 0 ? 0 : Math.max(0, previous - %d + 1);
+      value = frames[index];
+    }
+  } else {
+    value = current + (%d * max / 20 * %d);
+  }
+  value = Math.max(0, Math.min(max, value));
   scrub.value = value;
   scrub.dispatchEvent(new Event('input', { bubbles: true }));
   return value;
-})()" direction)))
+})()" direction direction count count direction count)))
 
 (defun org-markgraf--side-preview-execute (script)
   "Execute SCRIPT in the singleton side preview."
