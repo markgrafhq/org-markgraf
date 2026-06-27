@@ -48,4 +48,14 @@
   (should (equal (org-markgraf--inline-preview-size '((:height . "320") (:width . "760")))
                  '(760 . 320))))
 
+(ert-deftest org-markgraf-preview-button-mode-adds-buttons-for-markgraf-blocks ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+begin_src markgraf\nseed 1\n#+end_src\n\n#+begin_src emacs-lisp\nt\n#+end_src\n")
+    (org-markgraf-preview-button-mode 1)
+    (should (= (length org-markgraf--preview-button-overlays) 1))
+    (should (string-match-p "Preview Markgraf"
+                            (overlay-get (car org-markgraf--preview-button-overlays)
+                                         'before-string)))))
+
 ;;; org-markgraf-test.el ends here

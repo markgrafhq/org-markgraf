@@ -63,9 +63,20 @@
 (defvar-local org-markgraf--inline-previews nil
   "Inline markgraf preview records in the current buffer.")
 
+(defvar-local org-markgraf--preview-button-overlays nil
+  "Preview button overlays in the current buffer.")
+
+(defvar org-markgraf--preview-button-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map [mouse-1] #'org-markgraf-preview-button-click)
+    (define-key map (kbd "RET") #'org-markgraf-preview-button-activate)
+    map)
+  "Keymap used by inline markgraf preview buttons.")
+
 (defun org-markgraf-setup ()
   "Enable Org export and Babel support for markgraf source blocks."
   (add-to-list 'org-babel-load-languages '(markgraf . t))
+  (add-hook 'org-mode-hook #'org-markgraf-preview-button-mode)
   (if (boundp 'org-export-before-processing-functions)
       (add-hook 'org-export-before-processing-functions #'org-markgraf-export-blocks)
     (with-no-warnings
@@ -95,6 +106,49 @@
           (org-markgraf-html-assets)
           (org-markgraf--inline-css)
           (org-markgraf-html source params)))
+
+(define-minor-mode org-markgraf-preview-button-mode
+  "Show clickable inline preview buttons for markgraf source blocks."
+  :lighter " Markgraf"
+  (if org-markgraf-preview-button-mode
+      (progn
+        (add-hook 'after-change-functions #'org-markgraf--refresh-preview-buttons-after-change nil t)
+        (org-markgraf-refresh-preview-buttons))
+    (remove-hook 'after-change-functions #'org-markgraf--refresh-preview-buttons-after-change t)
+    (org-markgraf-clear-preview-buttons)))
+
+(defun org-markgraf-refresh-preview-buttons ()
+  "Refresh clickable preview buttons in the current Org buffer."
+  (interactive)
+  (org-markgraf-clear-preview-buttons)
+  (save-excursion
+    (org-element-map (org-element-parse-buffer) 'src-block
+      (lambda (block)
+        (when (string= (org-element-property :language block) "markgraf")
+          (org-markgraf--add-preview-button block))))))
+
+(defun org-markgraf-clear-preview-buttons ()
+  "Remove clickable preview buttons in the current buffer."
+  (interactive)
+  (mapc #'delete-overlay org-markgraf--preview-button-overlays)
+  (setq org-markgraf--preview-button-overlays nil))
+
+(defun org-markgraf-preview-button-click (event)
+  "Preview the markgraf source block for clicked EVENT."
+  (interactive "e")
+  (let* ((pos (posn-point (event-end event)))
+         (overlay (cl-find-if (lambda (candidate)
+                                (overlay-get candidate 'org-markgraf-block-begin))
+                              (overlays-at pos))))
+    (org-markgraf--preview-button-overlay overlay)))
+
+(defun org-markgraf-preview-button-activate ()
+  "Preview the markgraf source block for the button at point."
+  (interactive)
+  (let ((overlay (cl-find-if (lambda (candidate)
+                               (overlay-get candidate 'org-markgraf-block-begin))
+                             (overlays-at (point)))))
+    (org-markgraf--preview-button-overlay overlay)))
 
 (defun org-markgraf-preview-at-point ()
   "Render the markgraf block at point in a temporary browser page."
@@ -196,6 +250,37 @@
 (defun org-markgraf--export-block (html)
   "Return an Org raw HTML export block containing HTML."
   (concat "#+begin_export html\n" html "\n#+end_export\n"))
+
+(defun org-markgraf--add-preview-button (block)
+  "Add a clickable preview button for BLOCK."
+  (let* ((begin (org-element-property :begin block))
+         (overlay (make-overlay begin begin nil t nil)))
+    (overlay-put overlay 'org-markgraf-block-begin begin)
+    (overlay-put overlay 'before-string (org-markgraf--preview-button-string))
+    (push overlay org-markgraf--preview-button-overlays)))
+
+(defun org-markgraf--preview-button-string ()
+  "Return the clickable preview button display string."
+  (concat
+   (propertize "▶ Preview Markgraf"
+               'face 'button
+               'mouse-face 'highlight
+               'help-echo "mouse-1 or RET: preview markgraf inline"
+               'keymap org-markgraf--preview-button-map)
+   "\n"))
+
+(defun org-markgraf--preview-button-overlay (overlay)
+  "Preview the markgraf source block associated with OVERLAY."
+  (unless overlay
+    (user-error "No markgraf preview button here"))
+  (let ((begin (overlay-get overlay 'org-markgraf-block-begin)))
+    (goto-char begin)
+    (org-markgraf-preview-inline-at-point)))
+
+(defun org-markgraf--refresh-preview-buttons-after-change (&rest _)
+  "Refresh markgraf preview buttons after a buffer change."
+  (when org-markgraf-preview-button-mode
+    (org-markgraf-refresh-preview-buttons)))
 
 (defun org-markgraf--preview-file (block &optional inline)
   "Write BLOCK to a temporary HTML file and return the file path.
