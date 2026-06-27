@@ -88,6 +88,20 @@
   (should (string-match-p "Preview Markgraf" (org-markgraf--preview-button-string)))
   (should (string-match-p "Hide Markgraf" (org-markgraf--preview-button-string t))))
 
+(ert-deftest org-markgraf-live-reload-only-follows-source-buffer ()
+  (with-temp-buffer
+    (org-mode)
+    (org-markgraf-preview-button-mode 1)
+    (setq org-markgraf--side-preview-source-buffer (current-buffer)
+          org-markgraf--side-preview-source-marker (copy-marker (point-min)))
+    (cl-letf (((symbol-function 'get-buffer) (lambda (_) t)))
+      (org-markgraf--live-reload-after-change))
+    (should (timerp org-markgraf--live-reload-timer))
+    (cancel-timer org-markgraf--live-reload-timer)
+    (setq org-markgraf--live-reload-timer nil
+          org-markgraf--side-preview-source-buffer nil
+          org-markgraf--side-preview-source-marker nil)))
+
 (ert-deftest org-markgraf-side-preview-mode-has-evil-style-controls ()
   (should (eq (lookup-key org-markgraf-side-preview-mode-map (kbd "h"))
               #'org-markgraf-side-preview-scrub-backward))

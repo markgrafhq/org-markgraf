@@ -84,6 +84,21 @@
   :type 'number
   :group 'org-markgraf)
 
+(defcustom org-markgraf-preview-live-reload-delay 0.25
+  "Seconds to wait after edits before refreshing an open preview."
+  :type 'number
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-modal-preview-width 900
+  "Width in pixels for modal markgraf previews."
+  :type 'integer
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-modal-preview-height 620
+  "Height in pixels for modal markgraf previews."
+  :type 'integer
+  :group 'org-markgraf)
+
 (defvar org-markgraf--side-preview-file nil
   "Temporary file currently shown in the singleton side preview.")
 
@@ -92,6 +107,15 @@
 
 (defvar org-markgraf--side-preview-xwidget nil
   "Xwidget currently shown in the singleton side preview.")
+
+(defvar org-markgraf--side-preview-source-buffer nil
+  "Org buffer currently feeding the singleton side preview.")
+
+(defvar org-markgraf--side-preview-source-marker nil
+  "Source block marker currently feeding the singleton side preview.")
+
+(defvar org-markgraf--live-reload-timer nil
+  "Debounce timer for live preview reloads.")
 
 (defvar org-markgraf-side-preview-mode-map
   (let ((map (make-sparse-keymap)))
@@ -191,8 +215,10 @@
   (if org-markgraf-preview-button-mode
       (progn
         (add-hook 'after-change-functions #'org-markgraf--refresh-preview-buttons-after-change nil t)
+        (add-hook 'after-change-functions #'org-markgraf--live-reload-after-change nil t)
         (org-markgraf-refresh-preview-buttons))
     (remove-hook 'after-change-functions #'org-markgraf--refresh-preview-buttons-after-change t)
+    (remove-hook 'after-change-functions #'org-markgraf--live-reload-after-change t)
     (org-markgraf-clear-preview-buttons)))
 
 (defun org-markgraf-refresh-preview-buttons ()
@@ -231,6 +257,37 @@
 (defun org-markgraf-preview-side-at-point ()
   "Render the markgraf block at point in a singleton side preview buffer."
   (interactive)
+  (org-markgraf--preview-at-point
+   (lambda (buffer)
+     (display-buffer-in-side-window
+      buffer `((side . right)
+               (slot . 1)
+               (window-width . ,org-markgraf-side-preview-width))))
+   #'org-markgraf--side-preview-size))
+
+(defun org-markgraf-preview-modal-at-point ()
+  "Render the markgraf block at point in a modal child-frame preview."
+  (interactive)
+  (org-markgraf--preview-at-point
+   (lambda (buffer)
+     (display-buffer-in-child-frame
+      buffer
+      `((child-frame-parameters
+         . ((name . "markgraf-preview")
+            (width . ,org-markgraf-modal-preview-width)
+            (height . ,org-markgraf-modal-preview-height)
+            (left . 0.5)
+            (top . 0.5)
+            (minibuffer . nil)
+            (undecorated . t)
+            (skip-taskbar . t)
+            (no-other-frame . t)
+            (no-accept-focus . nil)
+            (internal-border-width . 12))))))
+   #'org-markgraf--modal-preview-size))
+
+(defun org-markgraf--preview-at-point (display size)
+  "Render the markgraf block at point using DISPLAY and SIZE."
   (unless (org-markgraf--xwidgets-available-p)
     (user-error "This Emacs was not built with xwidget-webkit support"))
   (let* ((block (org-markgraf--src-block-at-point))
@@ -238,12 +295,14 @@
          (block-begin (org-element-property :begin block))
          (file (org-markgraf--preview-file block t))
          (url (concat "file://" file))
-         (size (org-markgraf--side-preview-size params))
+         (preview-size (funcall size params))
          (buffer (get-buffer-create org-markgraf-side-preview-buffer-name)))
     (when org-markgraf--side-preview-file
       (ignore-errors (delete-file org-markgraf--side-preview-file)))
     (setq org-markgraf--side-preview-file file
-          org-markgraf--side-preview-block-begin block-begin)
+          org-markgraf--side-preview-block-begin block-begin
+          org-markgraf--side-preview-source-buffer (current-buffer)
+          org-markgraf--side-preview-source-marker (copy-marker block-begin))
     (with-current-buffer buffer
       (org-markgraf-side-preview-mode)
       (let ((inhibit-read-only t))
@@ -251,14 +310,11 @@
         (insert (propertize " " 'invisible t))
         (goto-char (point-min))
         (let ((xwidget (xwidget-insert (point) 'webkit "markgraf"
-                                       (car size)
-                                       (cdr size))))
+                                       (car preview-size)
+                                       (cdr preview-size))))
           (setq org-markgraf--side-preview-xwidget xwidget)
           (xwidget-webkit-goto-uri xwidget url))))
-    (display-buffer-in-side-window
-     buffer `((side . right)
-              (slot . 1)
-              (window-width . ,org-markgraf-side-preview-width)))
+    (funcall display buffer)
     buffer))
 
 (defun org-markgraf-close-side-preview ()
@@ -271,7 +327,9 @@
     (ignore-errors (delete-file org-markgraf--side-preview-file))
     (setq org-markgraf--side-preview-file nil
           org-markgraf--side-preview-block-begin nil
-          org-markgraf--side-preview-xwidget nil))
+          org-markgraf--side-preview-xwidget nil
+          org-markgraf--side-preview-source-buffer nil
+          org-markgraf--side-preview-source-marker nil))
   (dolist (overlay org-markgraf--preview-button-overlays)
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
 
@@ -499,6 +557,29 @@ When SHOWN is non-nil, render the button as a hide action."
   (when org-markgraf-preview-button-mode
     (org-markgraf-refresh-preview-buttons)))
 
+(defun org-markgraf--live-reload-after-change (&rest _)
+  "Schedule a live reload when this buffer feeds the open preview."
+  (when (and (eq (current-buffer) org-markgraf--side-preview-source-buffer)
+             org-markgraf--side-preview-source-marker
+             (get-buffer org-markgraf-side-preview-buffer-name))
+    (when org-markgraf--live-reload-timer
+      (cancel-timer org-markgraf--live-reload-timer))
+    (setq org-markgraf--live-reload-timer
+          (run-at-time org-markgraf-preview-live-reload-delay nil
+                       #'org-markgraf--live-reload-preview
+                       (current-buffer)
+                       org-markgraf--side-preview-source-marker))))
+
+(defun org-markgraf--live-reload-preview (buffer marker)
+  "Reload the singleton preview from BUFFER at MARKER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (when (and marker (marker-position marker))
+        (save-excursion
+          (goto-char marker)
+          (ignore-errors
+            (org-markgraf-preview-side-at-point)))))))
+
 (defun org-markgraf--preview-file (block &optional inline)
   "Write BLOCK to a temporary HTML file and return the file path.
 When INLINE is non-nil, write an Emacs inline preview document."
@@ -525,6 +606,11 @@ When INLINE is non-nil, write an Emacs inline preview document."
   "Return the singleton side preview xwidget size."
   (cons (max 320 (- (floor (* (frame-pixel-width) org-markgraf-side-preview-width)) 36))
         (max 260 (- (frame-pixel-height) 140))))
+
+(defun org-markgraf--modal-preview-size (_params)
+  "Return the modal preview xwidget size."
+  (cons (- org-markgraf-modal-preview-width 24)
+        (- org-markgraf-modal-preview-height 24)))
 
 (defun org-markgraf--preview-script ()
   "Return JavaScript tweaks for Emacs previews."
