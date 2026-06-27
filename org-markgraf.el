@@ -85,8 +85,8 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "h") #'org-markgraf-side-preview-scrub-backward)
     (define-key map (kbd "l") #'org-markgraf-side-preview-scrub-forward)
-    (define-key map (kbd "H") #'org-markgraf-side-preview-scrub-backward-fast)
-    (define-key map (kbd "L") #'org-markgraf-side-preview-scrub-forward-fast)
+    (define-key map "H" #'org-markgraf-side-preview-scrub-backward-fast)
+    (define-key map "L" #'org-markgraf-side-preview-scrub-forward-fast)
     (define-key map (kbd "<left>") #'org-markgraf-side-preview-scrub-backward)
     (define-key map (kbd "<right>") #'org-markgraf-side-preview-scrub-forward)
     (define-key map (kbd "SPC") #'org-markgraf-side-preview-toggle-play)
@@ -116,8 +116,8 @@
   (evil-define-key 'normal org-markgraf-side-preview-mode-map
     (kbd "h") #'org-markgraf-side-preview-scrub-backward
     (kbd "l") #'org-markgraf-side-preview-scrub-forward
-    (kbd "H") #'org-markgraf-side-preview-scrub-backward-fast
-    (kbd "L") #'org-markgraf-side-preview-scrub-forward-fast
+    "H" #'org-markgraf-side-preview-scrub-backward-fast
+    "L" #'org-markgraf-side-preview-scrub-forward-fast
     (kbd "SPC") #'org-markgraf-side-preview-toggle-play
     (kbd "p") #'org-markgraf-side-preview-toggle-play
     (kbd "q") #'org-markgraf-close-side-preview))
