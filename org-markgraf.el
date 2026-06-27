@@ -647,7 +647,7 @@ When INLINE is non-nil, write an Emacs inline preview document."
           (format ":root { --org-markgraf-font: %s; }\n" org-markgraf-preview-font-family)
           "* { box-sizing: border-box; font-family: var(--org-markgraf-font), sans-serif !important; }\n"
           "body { display: flex; align-items: center; justify-content: center; padding: 10px; }\n"
-          ".markgraf-embed { width: calc(100vw - 20px) !important; max-width: calc(100vw - 20px) !important; max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); overflow: hidden; }\n"
+          ".markgraf-embed { width: calc(100vw - 20px) !important; min-width: 100%; max-width: calc(100vw - 20px) !important; max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); overflow: hidden; }\n"
           ".markgraf-embed canvas[data-mg=\"stage\"] { width: 100% !important; max-width: 100% !important; max-height: calc(100vh - 22px); object-fit: contain; }\n"
           (unless org-markgraf-inline-preview-show-controls
             (concat

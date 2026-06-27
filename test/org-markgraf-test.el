@@ -49,6 +49,7 @@
 (ert-deftest org-markgraf-inline-preview-centres-and-frames-output ()
   (let ((html (org-markgraf-inline-html-document "seed 1")))
     (should (string-match-p "justify-content: center" html))
+    (should (string-match-p "min-width: 100%" html))
     (should (string-match-p "border: 1px solid" html))))
 
 (ert-deftest org-markgraf-inline-preview-hides-frame-titles-by-default ()
