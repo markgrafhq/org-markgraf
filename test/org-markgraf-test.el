@@ -58,6 +58,16 @@
                             (overlay-get (car org-markgraf--preview-button-overlays)
                                          'before-string)))))
 
+(ert-deftest org-markgraf-preview-button-overlay-is-clickable-at-block-start ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+begin_src markgraf\nseed 1\n#+end_src\n")
+    (org-markgraf-preview-button-mode 1)
+    (goto-char (point-min))
+    (should (cl-some (lambda (overlay)
+                       (overlay-get overlay 'org-markgraf-block-begin))
+                     (overlays-at (point))))))
+
 (ert-deftest org-markgraf-preview-button-string-can-show-hide-state ()
   (should (string-match-p "Preview Markgraf" (org-markgraf--preview-button-string)))
   (should (string-match-p "Hide Markgraf" (org-markgraf--preview-button-string t))))

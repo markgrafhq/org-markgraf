@@ -246,7 +246,8 @@
 (defun org-markgraf--add-preview-button (block)
   "Add a clickable preview button for BLOCK."
   (let* ((begin (org-element-property :begin block))
-         (overlay (make-overlay begin begin nil t nil)))
+         (end (org-element-property :end block))
+         (overlay (make-overlay begin (min (1+ begin) end) nil t nil)))
     (overlay-put overlay 'org-markgraf-block-begin begin)
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))
     (push overlay org-markgraf--preview-button-overlays)))
