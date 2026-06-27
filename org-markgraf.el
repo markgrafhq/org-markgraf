@@ -42,9 +42,21 @@
   :type 'string
   :group 'org-markgraf)
 
-(defcustom org-markgraf-inline-preview-width 900
+(defcustom org-markgraf-inline-preview-width 720
   "Width in pixels for inline markgraf previews."
   :type 'integer
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-preview-font-family
+  "-apple-system, BlinkMacSystemFont, system-ui, sans-serif"
+  "CSS font-family used around markgraf previews."
+  :type 'string
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-preview-font-file
+  "/Users/mark/code/markgraf/npm/public/Ilisarniq-Demi.otf"
+  "Sans-serif font file exposed to markgraf previews, or nil."
+  :type '(choice file (const nil))
   :group 'org-markgraf)
 
 (defcustom org-markgraf-inline-preview-height 360
@@ -507,17 +519,28 @@ When INLINE is non-nil, write an Emacs inline preview document."
   (cons (org-markgraf--dimension-pixels :width params org-markgraf-inline-preview-width)
         (org-markgraf--dimension-pixels :height params org-markgraf-inline-preview-height)))
 
-(defun org-markgraf--side-preview-size (params)
-  "Return the singleton side preview xwidget size for PARAMS."
-  (cons (org-markgraf--dimension-pixels :width params org-markgraf-inline-preview-width)
-        (org-markgraf--dimension-pixels :height params org-markgraf-inline-preview-height)))
+(defun org-markgraf--side-preview-size (_params)
+  "Return the singleton side preview xwidget size."
+  (cons (max 320 (- (floor (* (frame-pixel-width) org-markgraf-side-preview-width)) 36))
+        (max 260 (- (frame-pixel-height) 140))))
+
+(defun org-markgraf--font-face-css ()
+  "Return @font-face CSS for preview font when available."
+  (if (and org-markgraf-preview-font-file
+           (file-exists-p org-markgraf-preview-font-file))
+      (format "@font-face { font-family: 'Ilisarniq'; src: url('file://%s') format('opentype'); font-weight: 400 800; font-display: swap; }\n"
+              (org-markgraf--html-escape org-markgraf-preview-font-file))
+    ""))
 
 (defun org-markgraf--inline-css ()
   "Return CSS overrides for an inline Emacs preview."
-  (concat "html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; }\n"
-          "body { box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 10px; }\n"
-          ".markgraf-embed { box-sizing: border-box; width: 100%; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }\n"
-          ".markgraf-embed canvas[data-mg=\"stage\"] { max-height: calc(100vh - 22px); }\n"
+  (concat (org-markgraf--font-face-css)
+          "html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; font-family: var(--org-markgraf-font), sans-serif !important; }\n"
+          (format ":root { --org-markgraf-font: %s; }\n" org-markgraf-preview-font-family)
+          "* { box-sizing: border-box; font-family: var(--org-markgraf-font), sans-serif !important; }\n"
+          "body { display: flex; align-items: center; justify-content: center; padding: 10px; }\n"
+          ".markgraf-embed { width: calc(100vw - 20px) !important; max-width: calc(100vw - 20px) !important; max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); overflow: hidden; }\n"
+          ".markgraf-embed canvas[data-mg=\"stage\"] { width: 100% !important; max-width: 100% !important; max-height: calc(100vh - 22px); object-fit: contain; }\n"
           (unless org-markgraf-inline-preview-show-controls
             (concat
              ".markgraf-embed [data-mg=\"bar\"],\n"
