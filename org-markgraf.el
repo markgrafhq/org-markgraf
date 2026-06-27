@@ -430,7 +430,7 @@ When SHOWN is non-nil, render the button as a hide action."
   scrub.value = value;
   scrub.dispatchEvent(new Event('input', { bubbles: true }));
   return value;
-})()" direction direction count count direction count)))
+})()" direction count count direction count)))
 
 (defun org-markgraf--side-preview-execute (script)
   "Execute SCRIPT in the singleton side preview."
