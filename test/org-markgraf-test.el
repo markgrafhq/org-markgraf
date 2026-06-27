@@ -31,4 +31,12 @@
     (org-markgraf-export-blocks 'ascii)
     (should (string-match-p "#\\+begin_src markgraf" (buffer-string)))))
 
+(ert-deftest org-markgraf-inline-preview-reports-missing-xwidgets ()
+  (cl-letf (((symbol-function 'org-markgraf--xwidgets-available-p) (lambda () nil)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+begin_src markgraf\nseed 1\n#+end_src\n")
+      (goto-char (point-min))
+      (should-error (org-markgraf-preview-inline-at-point) :type 'user-error))))
+
 ;;; org-markgraf-test.el ends here

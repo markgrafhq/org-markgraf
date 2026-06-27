@@ -20,6 +20,9 @@
 (require 'org-element)
 (require 'subr-x)
 
+(declare-function xwidget-insert "xwidget" (pos type title width height &optional args related))
+(declare-function xwidget-webkit-goto-uri "xwidget" (xwidget uri))
+
 (defgroup org-markgraf nil
   "Render markgraf diagrams in Org."
   :group 'org
@@ -41,6 +44,19 @@
   "Function used by `org-markgraf-preview-at-point'."
   :type 'function
   :group 'org-markgraf)
+
+(defcustom org-markgraf-inline-preview-width 900
+  "Width in pixels for inline markgraf previews."
+  :type 'integer
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-inline-preview-height 520
+  "Height in pixels for inline markgraf previews."
+  :type 'integer
+  :group 'org-markgraf)
+
+(defvar-local org-markgraf--inline-previews nil
+  "Inline markgraf preview records in the current buffer.")
 
 (defun org-markgraf-setup ()
   "Enable Org export and Babel support for markgraf source blocks."
@@ -72,12 +88,57 @@
   "Render the markgraf block at point in a temporary browser page."
   (interactive)
   (let* ((block (org-markgraf--src-block-at-point))
-         (source (org-element-property :value block))
-         (params (org-babel-parse-header-arguments
-                  (or (org-element-property :parameters block) "")))
-         (file (make-temp-file "org-markgraf-" nil ".html")))
-    (write-region (org-markgraf-html-document source params) nil file nil 'silent)
+         (file (org-markgraf--preview-file block)))
     (funcall org-markgraf-preview-browser-function (concat "file://" file))))
+
+(defun org-markgraf-preview-inline-at-point ()
+  "Render the markgraf block at point inline with an Emacs WebKit xwidget."
+  (interactive)
+  (unless (org-markgraf--xwidgets-available-p)
+    (user-error "This Emacs was not built with xwidget-webkit support"))
+  (let* ((block (org-markgraf--src-block-at-point))
+         (begin (copy-marker (org-element-property :begin block)))
+         (end (copy-marker (org-element-property :end block) t))
+         (file (org-markgraf--preview-file block))
+         (url (concat "file://" file)))
+    (org-markgraf-clear-inline-preview-at-point)
+    (goto-char end)
+    (unless (bolp)
+      (insert "\n"))
+    (let* ((insert-begin (copy-marker (point)))
+           (xwidget (xwidget-insert (point) 'webkit "markgraf"
+                                    org-markgraf-inline-preview-width
+                                    org-markgraf-inline-preview-height))
+           (insert-end (copy-marker (point) t)))
+      (xwidget-webkit-goto-uri xwidget url)
+      (push (list begin end insert-begin insert-end xwidget file)
+            org-markgraf--inline-previews))))
+
+(defun org-markgraf-clear-inline-preview-at-point ()
+  "Clear the inline markgraf preview for the block at point."
+  (interactive)
+  (let* ((block (org-markgraf--src-block-at-point))
+         (block-begin (org-element-property :begin block)))
+    (setq org-markgraf--inline-previews
+          (cl-remove-if
+           (lambda (preview)
+             (when (= (marker-position (nth 0 preview)) block-begin)
+               (delete-region (marker-position (nth 2 preview))
+                              (marker-position (nth 3 preview)))
+               (when-let* ((file (nth 5 preview)))
+                 (ignore-errors (delete-file file)))
+               t))
+           org-markgraf--inline-previews))))
+
+(defun org-markgraf-clear-inline-previews ()
+  "Clear all inline markgraf previews in the current buffer."
+  (interactive)
+  (dolist (preview org-markgraf--inline-previews)
+    (delete-region (marker-position (nth 2 preview))
+                   (marker-position (nth 3 preview)))
+    (when-let* ((file (nth 5 preview)))
+      (ignore-errors (delete-file file))))
+  (setq org-markgraf--inline-previews nil))
 
 (defun org-babel-execute:markgraf (body params)
   "Execute a markgraf source block by returning its HTML embed for BODY and PARAMS."
@@ -121,6 +182,21 @@
 (defun org-markgraf--export-block (html)
   "Return an Org raw HTML export block containing HTML."
   (concat "#+begin_export html\n" html "\n#+end_export\n"))
+
+(defun org-markgraf--preview-file (block)
+  "Write BLOCK to a temporary HTML file and return the file path."
+  (let* ((source (org-element-property :value block))
+         (params (org-babel-parse-header-arguments
+                  (or (org-element-property :parameters block) "")))
+         (file (make-temp-file "org-markgraf-" nil ".html")))
+    (write-region (org-markgraf-html-document source params) nil file nil 'silent)
+    file))
+
+(defun org-markgraf--xwidgets-available-p ()
+  "Return non-nil when inline WebKit previews can be created."
+  (and (require 'xwidget nil t)
+       (fboundp 'xwidget-insert)
+       (fboundp 'xwidget-webkit-goto-uri)))
 
 (defun org-markgraf--src-block-at-point ()
   "Return the markgraf source block at point, or signal an error."
