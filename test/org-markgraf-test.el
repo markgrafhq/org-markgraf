@@ -39,4 +39,13 @@
       (goto-char (point-min))
       (should-error (org-markgraf-preview-inline-at-point) :type 'user-error))))
 
+(ert-deftest org-markgraf-inline-preview-hides-controls-by-default ()
+  (let ((html (org-markgraf-inline-html-document "seed 1")))
+    (should (string-match-p "data-mg=\"bar\"" html))
+    (should (string-match-p "display: none" html))))
+
+(ert-deftest org-markgraf-inline-preview-uses-pixel-dimensions ()
+  (should (equal (org-markgraf--inline-preview-size '((:height . "320") (:width . "760")))
+                 '(760 . 320))))
+
 ;;; org-markgraf-test.el ends here

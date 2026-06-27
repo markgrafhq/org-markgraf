@@ -50,9 +50,14 @@
   :type 'integer
   :group 'org-markgraf)
 
-(defcustom org-markgraf-inline-preview-height 520
+(defcustom org-markgraf-inline-preview-height 360
   "Height in pixels for inline markgraf previews."
   :type 'integer
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-inline-preview-show-controls nil
+  "When non-nil, show markgraf player controls in inline previews."
+  :type 'boolean
   :group 'org-markgraf)
 
 (defvar-local org-markgraf--inline-previews nil
@@ -84,6 +89,13 @@
           (org-markgraf-html-assets)
           (org-markgraf-html source params)))
 
+(defun org-markgraf-inline-html-document (source &optional params)
+  "Return a complete HTML document for an inline Emacs preview."
+  (format "<!doctype html>\n<meta charset=\"utf-8\">\n%s\n<style>\n%s\n</style>\n%s\n"
+          (org-markgraf-html-assets)
+          (org-markgraf--inline-css)
+          (org-markgraf-html source params)))
+
 (defun org-markgraf-preview-at-point ()
   "Render the markgraf block at point in a temporary browser page."
   (interactive)
@@ -99,16 +111,18 @@
   (let* ((block (org-markgraf--src-block-at-point))
          (begin (copy-marker (org-element-property :begin block)))
          (end (copy-marker (org-element-property :end block) t))
-         (file (org-markgraf--preview-file block))
-         (url (concat "file://" file)))
+         (params (org-markgraf--src-block-params block))
+         (file (org-markgraf--preview-file block t))
+         (url (concat "file://" file))
+         (size (org-markgraf--inline-preview-size params)))
     (org-markgraf-clear-inline-preview-at-point)
     (goto-char end)
     (unless (bolp)
       (insert "\n"))
     (let* ((insert-begin (copy-marker (point)))
            (xwidget (xwidget-insert (point) 'webkit "markgraf"
-                                    org-markgraf-inline-preview-width
-                                    org-markgraf-inline-preview-height))
+                                    (car size)
+                                    (cdr size)))
            (insert-end (copy-marker (point) t)))
       (xwidget-webkit-goto-uri xwidget url)
       (push (list begin end insert-begin insert-end xwidget file)
@@ -183,14 +197,36 @@
   "Return an Org raw HTML export block containing HTML."
   (concat "#+begin_export html\n" html "\n#+end_export\n"))
 
-(defun org-markgraf--preview-file (block)
-  "Write BLOCK to a temporary HTML file and return the file path."
+(defun org-markgraf--preview-file (block &optional inline)
+  "Write BLOCK to a temporary HTML file and return the file path.
+When INLINE is non-nil, write an Emacs inline preview document."
   (let* ((source (org-element-property :value block))
-         (params (org-babel-parse-header-arguments
-                  (or (org-element-property :parameters block) "")))
+         (params (org-markgraf--src-block-params block))
          (file (make-temp-file "org-markgraf-" nil ".html")))
-    (write-region (org-markgraf-html-document source params) nil file nil 'silent)
+    (write-region (if inline
+                      (org-markgraf-inline-html-document source params)
+                    (org-markgraf-html-document source params))
+                  nil file nil 'silent)
     file))
+
+(defun org-markgraf--src-block-params (block)
+  "Return parsed header arguments for BLOCK."
+  (org-babel-parse-header-arguments
+   (or (org-element-property :parameters block) "")))
+
+(defun org-markgraf--inline-preview-size (params)
+  "Return the xwidget size for PARAMS as WIDTH . HEIGHT."
+  (cons (org-markgraf--dimension-pixels :width params org-markgraf-inline-preview-width)
+        (org-markgraf--dimension-pixels :height params org-markgraf-inline-preview-height)))
+
+(defun org-markgraf--inline-css ()
+  "Return CSS overrides for an inline Emacs preview."
+  (concat "html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }\n"
+          "body { box-sizing: border-box; }\n"
+          ".markgraf-embed { border-radius: 6px; }\n"
+          ".markgraf-embed canvas[data-mg=\"stage\"] { max-height: calc(100vh - 2px); }\n"
+          (unless org-markgraf-inline-preview-show-controls
+            ".markgraf-embed [data-mg=\"bar\"], .markgraf-embed [data-mg=\"play-overlay\"] { display: none !important; }\n")))
 
 (defun org-markgraf--xwidgets-available-p ()
   "Return non-nil when inline WebKit previews can be created."
@@ -231,6 +267,13 @@
       (concat text "px"))
      ((string-match-p "\\`[0-9]+\\(?:\\.[0-9]+\\)?\\(?:px\\|%\\|svh\\|vh\\|dvh\\|em\\|rem\\)\\'" text)
       text))))
+
+(defun org-markgraf--dimension-pixels (key params default)
+  "Return KEY from PARAMS as pixels, falling back to DEFAULT."
+  (if-let* ((dimension (org-markgraf--dimension-param key params))
+            ((string-match "\\`\\([0-9]+\\(?:\\.[0-9]+\\)?\\)px\\'" dimension)))
+      (string-to-number (match-string 1 dimension))
+    default))
 
 (defun org-markgraf--html-escape (text)
   "Return TEXT escaped for HTML attributes."
