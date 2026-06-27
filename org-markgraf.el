@@ -108,6 +108,20 @@
     map)
   "Keymap used by inline markgraf preview buttons.")
 
+(defun org-markgraf--install-side-preview-keys ()
+  "Install side preview keys, including during package reloads."
+  (define-key org-markgraf-side-preview-mode-map (kbd "h") #'org-markgraf-side-preview-scrub-backward)
+  (define-key org-markgraf-side-preview-mode-map (kbd "l") #'org-markgraf-side-preview-scrub-forward)
+  (define-key org-markgraf-side-preview-mode-map "H" #'org-markgraf-side-preview-scrub-backward-fast)
+  (define-key org-markgraf-side-preview-mode-map "L" #'org-markgraf-side-preview-scrub-forward-fast)
+  (define-key org-markgraf-side-preview-mode-map (kbd "<left>") #'org-markgraf-side-preview-scrub-backward)
+  (define-key org-markgraf-side-preview-mode-map (kbd "<right>") #'org-markgraf-side-preview-scrub-forward)
+  (define-key org-markgraf-side-preview-mode-map (kbd "SPC") #'org-markgraf-side-preview-toggle-play)
+  (define-key org-markgraf-side-preview-mode-map (kbd "p") #'org-markgraf-side-preview-toggle-play)
+  (define-key org-markgraf-side-preview-mode-map (kbd "q") #'org-markgraf-close-side-preview))
+
+(org-markgraf--install-side-preview-keys)
+
 (define-derived-mode org-markgraf-side-preview-mode special-mode "Markgraf Preview"
   "Mode for the singleton markgraf side preview buffer."
   (setq-local kill-buffer-query-functions nil))
