@@ -307,7 +307,7 @@
       (org-markgraf-side-preview-mode)
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert (propertize " " 'invisible t))
+        (insert (org-markgraf--xwidget-anchor))
         (goto-char (point-min))
         (let ((xwidget (xwidget-insert (point) 'webkit "markgraf"
                                        (car preview-size)
@@ -602,6 +602,10 @@ When SHOWN is non-nil, render the button as a hide action."
           (goto-char marker)
           (ignore-errors
             (org-markgraf-preview-side-at-point)))))))
+
+(defun org-markgraf--xwidget-anchor ()
+  "Return a hidden character for anchoring an xwidget."
+  (propertize " " 'display "" 'invisible t 'rear-nonsticky t))
 
 (defun org-markgraf--preview-file (block &optional inline)
   "Write BLOCK to a temporary HTML file and return the file path.

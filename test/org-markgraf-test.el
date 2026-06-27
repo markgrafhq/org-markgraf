@@ -66,6 +66,11 @@
   (should (equal (org-markgraf--inline-preview-size '((:height . "320") (:width . "760")))
                  '(760 . 320))))
 
+(ert-deftest org-markgraf-xwidget-anchor-has-no-display ()
+  (let ((anchor (org-markgraf--xwidget-anchor)))
+    (should (string= anchor " "))
+    (should (string= (get-text-property 0 'display anchor) ""))))
+
 (ert-deftest org-markgraf-preview-button-mode-adds-buttons-for-markgraf-blocks ()
   (with-temp-buffer
     (org-mode)
