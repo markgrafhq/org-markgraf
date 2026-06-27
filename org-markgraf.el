@@ -55,6 +55,22 @@
   :type 'boolean
   :group 'org-markgraf)
 
+(defcustom org-markgraf-side-preview-buffer-name "*markgraf preview*"
+  "Singleton buffer name for side-window markgraf previews."
+  :type 'string
+  :group 'org-markgraf)
+
+(defcustom org-markgraf-side-preview-width 0.42
+  "Width used by the singleton side preview window."
+  :type 'number
+  :group 'org-markgraf)
+
+(defvar org-markgraf--side-preview-file nil
+  "Temporary file currently shown in the singleton side preview.")
+
+(defvar org-markgraf--side-preview-block-begin nil
+  "Source block position currently shown in the singleton side preview.")
+
 (defvar-local org-markgraf--inline-previews nil
   "Inline markgraf preview records in the current buffer.")
 
@@ -145,6 +161,47 @@
                              (overlays-at (point)))))
     (org-markgraf--preview-button-overlay overlay)))
 
+(defun org-markgraf-preview-side-at-point ()
+  "Render the markgraf block at point in a singleton side preview buffer."
+  (interactive)
+  (unless (org-markgraf--xwidgets-available-p)
+    (user-error "This Emacs was not built with xwidget-webkit support"))
+  (let* ((block (org-markgraf--src-block-at-point))
+         (params (org-markgraf--src-block-params block))
+         (block-begin (org-element-property :begin block))
+         (file (org-markgraf--preview-file block t))
+         (url (concat "file://" file))
+         (size (org-markgraf--side-preview-size params))
+         (buffer (get-buffer-create org-markgraf-side-preview-buffer-name)))
+    (when org-markgraf--side-preview-file
+      (ignore-errors (delete-file org-markgraf--side-preview-file)))
+    (setq org-markgraf--side-preview-file file
+          org-markgraf--side-preview-block-begin block-begin)
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (let ((xwidget (xwidget-insert (point-min) 'webkit "markgraf"
+                                       (car size)
+                                       (cdr size))))
+          (xwidget-webkit-goto-uri xwidget url))))
+    (display-buffer-in-side-window
+     buffer `((side . right)
+              (slot . 1)
+              (window-width . ,org-markgraf-side-preview-width)))
+    buffer))
+
+(defun org-markgraf-close-side-preview ()
+  "Close the singleton side preview buffer and delete its temp file."
+  (interactive)
+  (when-let* ((buffer (get-buffer org-markgraf-side-preview-buffer-name)))
+    (kill-buffer buffer))
+  (when org-markgraf--side-preview-file
+    (ignore-errors (delete-file org-markgraf--side-preview-file))
+    (setq org-markgraf--side-preview-file nil
+          org-markgraf--side-preview-block-begin nil))
+  (dolist (overlay org-markgraf--preview-button-overlays)
+    (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
+
 (defun org-markgraf-preview-inline-at-point ()
   "Render the markgraf block at point inline with an Emacs WebKit xwidget."
   (interactive)
@@ -200,8 +257,8 @@
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
 
 (defun org-babel-execute:markgraf (_body _params)
-  "Preview a markgraf source block inline instead of inserting HTML results."
-  (org-markgraf-preview-inline-at-point)
+  "Preview a markgraf source block in the singleton side preview."
+  (org-markgraf-preview-side-at-point)
   "")
 
 (defun org-markgraf-export-blocks (backend)
@@ -259,7 +316,7 @@ When SHOWN is non-nil, render the button as a hide action."
    (propertize (if shown "▼ Hide Markgraf" "▶ Preview Markgraf")
                'face 'button
                'mouse-face 'highlight
-               'help-echo "mouse-1 or RET: toggle markgraf inline preview"
+               'help-echo "mouse-1 or RET: toggle markgraf side preview"
                'keymap org-markgraf--preview-button-map)
    "\n"))
 
@@ -283,11 +340,12 @@ When SHOWN is non-nil, render the button as a hide action."
     (user-error "No markgraf preview button here"))
   (let ((begin (overlay-get overlay 'org-markgraf-block-begin)))
     (goto-char begin)
-    (if (org-markgraf--inline-preview-shown-p begin)
-        (progn
-          (org-markgraf-clear-inline-preview-at-point)
-          (overlay-put overlay 'before-string (org-markgraf--preview-button-string)))
-      (org-markgraf-preview-inline-at-point)
+    (if (and (equal org-markgraf--side-preview-block-begin begin)
+             (get-buffer org-markgraf-side-preview-buffer-name))
+        (org-markgraf-close-side-preview)
+      (org-markgraf-preview-side-at-point)
+      (dolist (candidate org-markgraf--preview-button-overlays)
+        (overlay-put candidate 'before-string (org-markgraf--preview-button-string)))
       (overlay-put overlay 'before-string (org-markgraf--preview-button-string t)))))
 
 (defun org-markgraf--refresh-preview-buttons-after-change (&rest _)
@@ -314,6 +372,11 @@ When INLINE is non-nil, write an Emacs inline preview document."
 
 (defun org-markgraf--inline-preview-size (params)
   "Return the xwidget size for PARAMS as WIDTH . HEIGHT."
+  (cons (org-markgraf--dimension-pixels :width params org-markgraf-inline-preview-width)
+        (org-markgraf--dimension-pixels :height params org-markgraf-inline-preview-height)))
+
+(defun org-markgraf--side-preview-size (params)
+  "Return the singleton side preview xwidget size for PARAMS."
   (cons (org-markgraf--dimension-pixels :width params org-markgraf-inline-preview-width)
         (org-markgraf--dimension-pixels :height params org-markgraf-inline-preview-height)))
 
