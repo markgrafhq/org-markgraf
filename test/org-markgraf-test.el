@@ -58,4 +58,8 @@
                             (overlay-get (car org-markgraf--preview-button-overlays)
                                          'before-string)))))
 
+(ert-deftest org-markgraf-preview-button-string-can-show-hide-state ()
+  (should (string-match-p "Preview Markgraf" (org-markgraf--preview-button-string)))
+  (should (string-match-p "Hide Markgraf" (org-markgraf--preview-button-string t))))
+
 ;;; org-markgraf-test.el ends here

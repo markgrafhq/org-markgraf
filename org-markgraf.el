@@ -40,11 +40,6 @@
   :type 'string
   :group 'org-markgraf)
 
-(defcustom org-markgraf-preview-browser-function #'browse-url
-  "Function used by `org-markgraf-preview-at-point'."
-  :type 'function
-  :group 'org-markgraf)
-
 (defcustom org-markgraf-inline-preview-width 900
   "Width in pixels for inline markgraf previews."
   :type 'integer
@@ -150,13 +145,6 @@
                              (overlays-at (point)))))
     (org-markgraf--preview-button-overlay overlay)))
 
-(defun org-markgraf-preview-at-point ()
-  "Render the markgraf block at point in a temporary browser page."
-  (interactive)
-  (let* ((block (org-markgraf--src-block-at-point))
-         (file (org-markgraf--preview-file block)))
-    (funcall org-markgraf-preview-browser-function (concat "file://" file))))
-
 (defun org-markgraf-preview-inline-at-point ()
   "Render the markgraf block at point inline with an Emacs WebKit xwidget."
   (interactive)
@@ -196,7 +184,8 @@
                (when-let* ((file (nth 5 preview)))
                  (ignore-errors (delete-file file)))
                t))
-           org-markgraf--inline-previews))))
+           org-markgraf--inline-previews))
+    (org-markgraf--set-preview-button-state block-begin nil)))
 
 (defun org-markgraf-clear-inline-previews ()
   "Clear all inline markgraf previews in the current buffer."
@@ -206,11 +195,14 @@
                    (marker-position (nth 3 preview)))
     (when-let* ((file (nth 5 preview)))
       (ignore-errors (delete-file file))))
-  (setq org-markgraf--inline-previews nil))
+  (setq org-markgraf--inline-previews nil)
+  (dolist (overlay org-markgraf--preview-button-overlays)
+    (overlay-put overlay 'before-string (org-markgraf--preview-button-string))))
 
-(defun org-babel-execute:markgraf (body params)
-  "Execute a markgraf source block by returning its HTML embed for BODY and PARAMS."
-  (org-markgraf-html-document body params))
+(defun org-babel-execute:markgraf (_body _params)
+  "Preview a markgraf source block inline instead of inserting HTML results."
+  (org-markgraf-preview-inline-at-point)
+  "")
 
 (defun org-markgraf-export-blocks (backend)
   "Replace markgraf source blocks before exporting to BACKEND."
@@ -259,23 +251,43 @@
     (overlay-put overlay 'before-string (org-markgraf--preview-button-string))
     (push overlay org-markgraf--preview-button-overlays)))
 
-(defun org-markgraf--preview-button-string ()
-  "Return the clickable preview button display string."
+(defun org-markgraf--preview-button-string (&optional shown)
+  "Return the clickable preview button display string.
+When SHOWN is non-nil, render the button as a hide action."
   (concat
-   (propertize "▶ Preview Markgraf"
+   (propertize (if shown "▼ Hide Markgraf" "▶ Preview Markgraf")
                'face 'button
                'mouse-face 'highlight
-               'help-echo "mouse-1 or RET: preview markgraf inline"
+               'help-echo "mouse-1 or RET: toggle markgraf inline preview"
                'keymap org-markgraf--preview-button-map)
    "\n"))
 
+(defun org-markgraf--inline-preview-shown-p (block-begin)
+  "Return non-nil when BLOCK-BEGIN has an inline preview."
+  (cl-some (lambda (preview)
+             (= (marker-position (nth 0 preview)) block-begin))
+           org-markgraf--inline-previews))
+
+(defun org-markgraf--set-preview-button-state (block-begin shown)
+  "Set the preview button for BLOCK-BEGIN to SHOWN state."
+  (when-let* ((overlay (cl-find-if
+                        (lambda (candidate)
+                          (= (overlay-get candidate 'org-markgraf-block-begin) block-begin))
+                        org-markgraf--preview-button-overlays)))
+    (overlay-put overlay 'before-string (org-markgraf--preview-button-string shown))))
+
 (defun org-markgraf--preview-button-overlay (overlay)
-  "Preview the markgraf source block associated with OVERLAY."
+  "Toggle the markgraf source block preview associated with OVERLAY."
   (unless overlay
     (user-error "No markgraf preview button here"))
   (let ((begin (overlay-get overlay 'org-markgraf-block-begin)))
     (goto-char begin)
-    (org-markgraf-preview-inline-at-point)))
+    (if (org-markgraf--inline-preview-shown-p begin)
+        (progn
+          (org-markgraf-clear-inline-preview-at-point)
+          (overlay-put overlay 'before-string (org-markgraf--preview-button-string)))
+      (org-markgraf-preview-inline-at-point)
+      (overlay-put overlay 'before-string (org-markgraf--preview-button-string t)))))
 
 (defun org-markgraf--refresh-preview-buttons-after-change (&rest _)
   "Refresh markgraf preview buttons after a buffer change."
