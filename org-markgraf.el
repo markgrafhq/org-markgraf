@@ -136,7 +136,8 @@
 
 (define-derived-mode org-markgraf-side-preview-mode special-mode "Markgraf Preview"
   "Mode for the singleton markgraf side preview buffer."
-  (setq-local kill-buffer-query-functions nil))
+  (setq-local kill-buffer-query-functions nil)
+  (setq-local buffer-invisibility-spec t))
 
 (with-eval-after-load 'evil
   (evil-define-key 'normal org-markgraf-side-preview-mode-map
@@ -178,10 +179,11 @@
 
 (defun org-markgraf-inline-html-document (source &optional params)
   "Return a complete HTML document for an inline Emacs preview."
-  (format "<!doctype html>\n<meta charset=\"utf-8\">\n%s\n<style>\n%s\n</style>\n%s\n"
+  (format "<!doctype html>\n<meta charset=\"utf-8\">\n%s\n<style>\n%s\n</style>\n%s\n<script>\n%s\n</script>\n"
           (org-markgraf-html-assets)
           (org-markgraf--inline-css)
-          (org-markgraf-html source params (org-markgraf--inline-attributes))))
+          (org-markgraf-html source params (org-markgraf--inline-attributes))
+          (org-markgraf--preview-script)))
 
 (define-minor-mode org-markgraf-preview-button-mode
   "Show clickable inline preview buttons for markgraf source blocks."
@@ -246,7 +248,7 @@
       (org-markgraf-side-preview-mode)
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert "\n")
+        (insert (propertize " " 'invisible t))
         (goto-char (point-min))
         (let ((xwidget (xwidget-insert (point) 'webkit "markgraf"
                                        (car size)
@@ -524,6 +526,26 @@ When INLINE is non-nil, write an Emacs inline preview document."
   (cons (max 320 (- (floor (* (frame-pixel-width) org-markgraf-side-preview-width)) 36))
         (max 260 (- (frame-pixel-height) 140))))
 
+(defun org-markgraf--preview-script ()
+  "Return JavaScript tweaks for Emacs previews."
+  "(() => {
+  let previous = 0;
+  setInterval(() => {
+    const scrub = document.querySelector('[data-mg=\"scrub\"]');
+    const play = document.querySelector('[data-mg=\"play\"]');
+    if (!scrub || !play) return;
+    const max = Number(scrub.max || 1000);
+    const current = Number(scrub.value || 0);
+    const playing = play.getAttribute('data-mg-playing') === '1';
+    if (playing && previous > max * 0.9 && current < max * 0.1) {
+      scrub.value = max;
+      scrub.dispatchEvent(new Event('input', { bubbles: true }));
+      if (play.getAttribute('data-mg-playing') === '1') play.click();
+    }
+    previous = current;
+  }, 80);
+})()")
+
 (defun org-markgraf--font-face-css ()
   "Return @font-face CSS for preview font when available."
   (if (and org-markgraf-preview-font-file
@@ -549,7 +571,10 @@ When INLINE is non-nil, write an Emacs inline preview document."
              ".markgraf-embed [data-mg=\"scrub-wrap\"],\n"
              ".markgraf-embed [data-mg=\"scrub\"],\n"
              ".markgraf-embed [data-mg=\"time\"],\n"
-             ".markgraf-embed [data-mg=\"speed\"] { display: none !important; }\n"))))
+             ".markgraf-embed [data-mg=\"speed\"],\n"
+             ".markgraf-embed input,\n"
+             ".markgraf-embed button,\n"
+             ".markgraf-embed select { display: none !important; visibility: hidden !important; opacity: 0 !important; }\n"))))
 
 (defun org-markgraf--xwidgets-available-p ()
   "Return non-nil when inline WebKit previews can be created."
