@@ -471,7 +471,14 @@ When INLINE is non-nil, write an Emacs inline preview document."
           ".markgraf-embed { box-sizing: border-box; width: 100%; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }\n"
           ".markgraf-embed canvas[data-mg=\"stage\"] { max-height: calc(100vh - 22px); }\n"
           (unless org-markgraf-inline-preview-show-controls
-            ".markgraf-embed [data-mg=\"bar\"], .markgraf-embed [data-mg=\"play-overlay\"] { display: none !important; }\n")))
+            (concat
+             ".markgraf-embed [data-mg=\"bar\"],\n"
+             ".markgraf-embed [data-mg=\"play\"],\n"
+             ".markgraf-embed [data-mg=\"play-overlay\"],\n"
+             ".markgraf-embed [data-mg=\"scrub-wrap\"],\n"
+             ".markgraf-embed [data-mg=\"scrub\"],\n"
+             ".markgraf-embed [data-mg=\"time\"],\n"
+             ".markgraf-embed [data-mg=\"speed\"] { display: none !important; }\n"))))
 
 (defun org-markgraf--xwidgets-available-p ()
   "Return non-nil when inline WebKit previews can be created."

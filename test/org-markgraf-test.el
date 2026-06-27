@@ -42,6 +42,8 @@
 (ert-deftest org-markgraf-inline-preview-hides-controls-by-default ()
   (let ((html (org-markgraf-inline-html-document "seed 1")))
     (should (string-match-p "data-mg=\"bar\"" html))
+    (should (string-match-p "data-mg=\"scrub\"" html))
+    (should (string-match-p "data-mg=\"play\"" html))
     (should (string-match-p "display: none" html))))
 
 (ert-deftest org-markgraf-inline-preview-centres-and-frames-output ()
