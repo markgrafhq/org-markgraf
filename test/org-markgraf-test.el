@@ -54,10 +54,12 @@
 
 (ert-deftest org-markgraf-inline-preview-hides-frame-titles-by-default ()
   (let ((html (org-markgraf-inline-html-document "seed 1")))
+    (should (string-match-p "data-markgraf-paused=\"true\"" html))
     (should (string-match-p "data-markgraf-titles=\"false\"" html))))
 
 (ert-deftest org-markgraf-inline-preview-stops-before-looping ()
   (let ((html (org-markgraf-inline-html-document "seed 1")))
+    (should (string-match-p "current >= max" html))
     (should (string-match-p "previous > max" html))
     (should (string-match-p "play.click" html))))
 

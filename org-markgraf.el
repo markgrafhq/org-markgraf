@@ -623,10 +623,19 @@ When INLINE is non-nil, write an Emacs inline preview document."
     const max = Number(scrub.max || 1000);
     const current = Number(scrub.value || 0);
     const playing = play.getAttribute('data-mg-playing') === '1';
-    if (playing && previous > max * 0.9 && current < max * 0.1) {
+    if (playing && current >= max - 2) {
+      if (play.getAttribute('data-mg-playing') === '1') play.click();
       scrub.value = max;
       scrub.dispatchEvent(new Event('input', { bubbles: true }));
+      previous = max;
+      return;
+    }
+    if (playing && previous > max * 0.9 && current < max * 0.1) {
       if (play.getAttribute('data-mg-playing') === '1') play.click();
+      scrub.value = max;
+      scrub.dispatchEvent(new Event('input', { bubbles: true }));
+      previous = max;
+      return;
     }
     previous = current;
   }, 80);
@@ -682,8 +691,9 @@ When INLINE is non-nil, write an Emacs inline preview document."
 
 (defun org-markgraf--inline-attributes ()
   "Return HTML attributes for inline Emacs previews."
-  (unless org-markgraf-inline-preview-show-titles
-    '(("data-markgraf-titles" . "false"))))
+  (append '(("data-markgraf-paused" . "true"))
+          (unless org-markgraf-inline-preview-show-titles
+            '(("data-markgraf-titles" . "false")))))
 
 (defun org-markgraf--attributes (attributes)
   "Return ATTRIBUTES formatted for an HTML tag."
