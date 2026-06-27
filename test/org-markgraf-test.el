@@ -44,6 +44,11 @@
     (should (string-match-p "data-mg=\"bar\"" html))
     (should (string-match-p "display: none" html))))
 
+(ert-deftest org-markgraf-inline-preview-centres-and-frames-output ()
+  (let ((html (org-markgraf-inline-html-document "seed 1")))
+    (should (string-match-p "justify-content: center" html))
+    (should (string-match-p "border: 1px solid" html))))
+
 (ert-deftest org-markgraf-inline-preview-uses-pixel-dimensions ()
   (should (equal (org-markgraf--inline-preview-size '((:height . "320") (:width . "760")))
                  '(760 . 320))))

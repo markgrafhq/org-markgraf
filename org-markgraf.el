@@ -388,10 +388,10 @@ When INLINE is non-nil, write an Emacs inline preview document."
 
 (defun org-markgraf--inline-css ()
   "Return CSS overrides for an inline Emacs preview."
-  (concat "html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }\n"
-          "body { box-sizing: border-box; }\n"
-          ".markgraf-embed { border-radius: 6px; }\n"
-          ".markgraf-embed canvas[data-mg=\"stage\"] { max-height: calc(100vh - 2px); }\n"
+  (concat "html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; }\n"
+          "body { box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 10px; }\n"
+          ".markgraf-embed { box-sizing: border-box; width: 100%; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px); border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }\n"
+          ".markgraf-embed canvas[data-mg=\"stage\"] { max-height: calc(100vh - 22px); }\n"
           (unless org-markgraf-inline-preview-show-controls
             ".markgraf-embed [data-mg=\"bar\"], .markgraf-embed [data-mg=\"play-overlay\"] { display: none !important; }\n")))
 
