@@ -638,30 +638,17 @@ When INLINE is non-nil, write an Emacs inline preview document."
 (defun org-markgraf--preview-script ()
   "Return JavaScript tweaks for Emacs previews."
   "(() => {
-  let previous = 0;
-  setInterval(() => {
-    const scrub = document.querySelector('[data-mg=\"scrub\"]');
+  let attempts = 0;
+  const stopNativePlayback = setInterval(() => {
+    attempts += 1;
     const play = document.querySelector('[data-mg=\"play\"]');
-    if (!scrub || !play) return;
-    const max = Number(scrub.max || 1000);
-    const current = Number(scrub.value || 0);
-    const playing = play.getAttribute('data-mg-playing') === '1';
-    if (playing && current >= max - 2) {
-      if (play.getAttribute('data-mg-playing') === '1') play.click();
-      scrub.value = max;
-      scrub.dispatchEvent(new Event('input', { bubbles: true }));
-      previous = max;
-      return;
+    if (play && play.getAttribute('data-mg-playing') === '1') {
+      play.click();
     }
-    if (playing && previous > max * 0.9 && current < max * 0.1) {
-      if (play.getAttribute('data-mg-playing') === '1') play.click();
-      scrub.value = max;
-      scrub.dispatchEvent(new Event('input', { bubbles: true }));
-      previous = max;
-      return;
+    if (play || attempts > 40) {
+      clearInterval(stopNativePlayback);
     }
-    previous = current;
-  }, 80);
+  }, 50);
 })()")
 
 (defun org-markgraf--font-face-css ()
